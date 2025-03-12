@@ -4,11 +4,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 import itertools
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, classification_report
 
 def load_and_preprocess_data():
     """
     Load the MNIST dataset and normalize the images.
+    
     Returns:
         (x_train, y_train): Training data and labels.
         (x_test, y_test): Test data and labels.
@@ -50,7 +51,6 @@ def plot_history(history, output_dir="plots"):
     """
     os.makedirs(output_dir, exist_ok=True)
     
-    # Combined plot with accuracy and loss side by side
     plt.figure(figsize=(12, 5))
     
     # Plot Accuracy
@@ -151,6 +151,102 @@ def plot_sample_predictions(x_test, y_test, predictions, output_dir="plots", fil
     print(f"Sample predictions plot saved to {sample_plot_path}")
     plt.show()
 
+def plot_misclassified_images(x_test, y_test, predictions, output_dir="plots", filename="misclassified.png"):
+    """
+    Plot and save a grid of misclassified images.
+    
+    Args:
+        x_test: Test images.
+        y_test: True labels.
+        predictions: Model predictions.
+        output_dir: Directory to save plots.
+        filename: Filename for the saved plot.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    misclassified = np.where(np.argmax(predictions, axis=1) != y_test)[0]
+    if len(misclassified) == 0:
+        print("No misclassified images found!")
+        return
+    
+    num_images = min(25, len(misclassified))
+    indices = np.random.choice(misclassified, num_images, replace=False)
+    
+    plt.figure(figsize=(10, 10))
+    num_rows, num_cols = 5, 5
+    for i, idx in enumerate(indices):
+        plt.subplot(num_rows, num_cols, i + 1)
+        plt.imshow(x_test[idx], cmap=plt.cm.binary)
+        pred_label = np.argmax(predictions[idx])
+        plt.title(f"T:{y_test[idx]}\nP:{pred_label}", fontsize=8)
+        plt.axis('off')
+    
+    plt.tight_layout()
+    misclassified_plot_path = os.path.join(output_dir, filename)
+    plt.savefig(misclassified_plot_path)
+    print(f"Misclassified images plot saved to {misclassified_plot_path}")
+    plt.show()
+
+def plot_probability_distribution(x_test, y_test, predictions, index=None, output_dir="plots", filename="probability_distribution.png"):
+    """
+    Plot and save the softmax probability distribution for a sample image.
+    
+    Args:
+        x_test: Test images.
+        y_test: True labels.
+        predictions: Model predictions.
+        index: Index of the sample image to plot. If None, a random index is chosen.
+        output_dir: Directory to save the plot.
+        filename: Filename for the saved plot.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if index is None:
+        index = np.random.randint(0, len(x_test))
+    
+    sample_pred = predictions[index]
+    true_label = y_test[index]
+    plt.figure(figsize=(8, 4))
+    plt.bar(np.arange(10), sample_pred)
+    plt.xticks(np.arange(10))
+    plt.xlabel("Class")
+    plt.ylabel("Probability")
+    plt.title(f"Probability Distribution for Sample Index {index} (True label: {true_label})")
+    prob_plot_path = os.path.join(output_dir, filename)
+    plt.savefig(prob_plot_path)
+    print(f"Probability distribution plot saved to {prob_plot_path}")
+    plt.show()
+
+def save_model_architecture(model, output_dir="plots", filename="model_architecture.png"):
+    """
+    Save a plot of the model architecture.
+    
+    Args:
+        model: Keras model instance.
+        output_dir: Directory to save the plot.
+        filename: Filename for the saved plot.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    try:
+        tf.keras.utils.plot_model(model, to_file=os.path.join(output_dir, filename), show_shapes=True, show_layer_names=True)
+        print(f"Model architecture plot saved to {os.path.join(output_dir, filename)}")
+    except Exception as e:
+        print("Could not save model architecture plot. Please ensure that 'pydot' and Graphviz are installed.")
+        print(str(e))
+
+def print_classification_report(y_test, predictions):
+    """
+    Print the classification report showing precision, recall, and F1-score.
+    
+    Args:
+        y_test: True labels.
+        predictions: Model predictions.
+    """
+    y_pred = np.argmax(predictions, axis=1)
+    report = classification_report(y_test, y_pred, target_names=[str(i) for i in range(10)])
+    print("Classification Report:")
+    print(report)
+
 def main():
     # Load and preprocess the data
     (x_train, y_train), (x_test, y_test) = load_and_preprocess_data()
@@ -158,6 +254,9 @@ def main():
     # Build and summarize the model
     model = build_model(input_shape=x_train.shape[1:], num_classes=10)
     model.summary()
+    
+    # Save the model architecture visualization
+    save_model_architecture(model)
     
     # Define callbacks: EarlyStopping and ModelCheckpoint
     early_stop = callbacks.EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
@@ -176,19 +275,28 @@ def main():
     test_loss, test_acc = model.evaluate(x_test, y_test, verbose=2)
     print(f'\nTest Accuracy: {test_acc:.4f}')
     
-    # Generate and save plots
+    # Generate and save training history plots
     plot_history(history)
     
-    # Make predictions on test data
+    # Make predictions on the test data
     predictions = model.predict(x_test)
     
-    # Generate confusion matrix and plot
+    # Plot and save the confusion matrix
     cm = confusion_matrix(y_test, np.argmax(predictions, axis=1))
     class_labels = [str(i) for i in range(10)]
     plot_confusion_matrix(cm, classes=class_labels, normalize=True)
     
-    # Plot sample predictions from the test set
+    # Plot and save sample predictions
     plot_sample_predictions(x_test, y_test, predictions)
+    
+    # Print classification report
+    print_classification_report(y_test, predictions)
+    
+    # Plot and save misclassified images
+    plot_misclassified_images(x_test, y_test, predictions)
+    
+    # Plot and save the probability distribution for a sample image
+    plot_probability_distribution(x_test, y_test, predictions)
 
 if __name__ == '__main__':
     main()
